@@ -90,6 +90,10 @@ body {
   background: #4ade80;
 }
 
+.status-indicator.offline {
+  background: #666;
+}
+
 .logout-btn {
   padding: 8px 16px;
   background: #dc2626;

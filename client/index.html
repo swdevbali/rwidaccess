@@ -39,10 +39,10 @@
       
       <div class="user-info">
         <div class="user-status" id="userStatusDiv" style="cursor: pointer;">
-          <span class="status-indicator online"></span>
-          <span id="userEmail">Not logged in</span>
+          <span class="status-indicator offline"></span>
+          <span id="userEmail">Click to login</span>
         </div>
-        <button id="logoutBtn" class="logout-btn">Logout</button>
+        <button id="logoutBtn" class="logout-btn" style="display: none;">Logout</button>
       </div>
     </div>
     
@@ -113,11 +113,11 @@
             </div>
             <div class="setting-item">
               <label>Server URL</label>
-              <input type="text" id="serverUrl" class="input" placeholder="https://rwidaccess.remoteworker.id">
+              <input type="text" id="serverUrl" class="input" placeholder="https://access.remoteworker.id">
             </div>
             <div class="setting-item">
               <label>WebSocket URL</label>
-              <input type="text" id="wsUrl" class="input" placeholder="wss://ws.rwidaccess.remoteworker.id">
+              <input type="text" id="wsUrl" class="input" placeholder="wss://access.remoteworker.id/ws">
             </div>
           </div>
           

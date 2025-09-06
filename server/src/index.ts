@@ -5,15 +5,28 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import dotenv from 'dotenv';
+import http from 'http';
 
 dotenv.config();
 
 const app = express();
+const server = http.createServer(app);
 const prisma = new PrismaClient();
 const PORT = process.env.SERVER_PORT || 3001;
-const WS_PORT = process.env.WS_PORT || 3002;
 
 app.use(express.json());
+
+// Add CORS headers for Cloudflare
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+});
 
 interface ConnectedDevice {
   ws: any;
@@ -160,7 +173,11 @@ app.delete('/api/device/:deviceId', async (req, res) => {
   }
 });
 
-const wss = new WebSocketServer({ port: Number(WS_PORT) });
+// WebSocket server on /ws path for Cloudflare Tunnel compatibility
+const wss = new WebSocketServer({ 
+  server,
+  path: '/ws'
+});
 
 wss.on('connection', (ws) => {
   let deviceInfo: ConnectedDevice | null = null;
@@ -259,7 +276,7 @@ wss.on('connection', (ws) => {
   });
 });
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`WebSocket server running on port ${WS_PORT}`);
+  console.log(`WebSocket server available at /ws path`);
 });

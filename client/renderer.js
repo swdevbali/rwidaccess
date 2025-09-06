@@ -10,8 +10,9 @@ let screenCaptureInterval = null;
 let dataChannel = null;
 let pendingIceCandidates = [];
 
-const SERVER_URL = localStorage.getItem('serverUrl') || 'https://rwidaccess.remoteworker.id';
-const WS_URL = localStorage.getItem('wsUrl') || 'wss://ws.rwidaccess.remoteworker.id';
+const SERVER_URL = localStorage.getItem('serverUrl') || 'https://access.remoteworker.id';
+// For Cloudflare Tunnel, WebSocket uses the same domain with /ws path
+const WS_URL = localStorage.getItem('wsUrl') || 'wss://access.remoteworker.id/ws';
 
 const configuration = {
   iceServers: [
@@ -29,9 +30,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function initializeApp() {
   const savedEmail = localStorage.getItem('userEmail');
-  if (savedEmail) {
-    document.getElementById('userEmail').textContent = savedEmail;
+  const authToken = localStorage.getItem('authToken');
+  const userEmailElement = document.getElementById('userEmail');
+  const logoutBtn = document.getElementById('logoutBtn');
+  const statusIndicator = document.querySelector('.user-status .status-indicator');
+  
+  if (savedEmail && authToken) {
+    // User is logged in
+    if (userEmailElement) userEmailElement.textContent = savedEmail;
     document.getElementById('settingsEmail').value = savedEmail;
+    if (statusIndicator) {
+      statusIndicator.classList.add('online');
+      statusIndicator.classList.remove('offline');
+    }
+    if (logoutBtn) {
+      logoutBtn.textContent = 'Logout';
+      logoutBtn.style.display = 'block';
+    }
+  } else {
+    // User is not logged in
+    if (userEmailElement) userEmailElement.textContent = 'Click to login';
+    if (statusIndicator) {
+      statusIndicator.classList.remove('online');
+      statusIndicator.classList.add('offline');
+    }
+    if (logoutBtn) {
+      logoutBtn.style.display = 'none';
+    }
   }
   
   const savedDeviceName = localStorage.getItem('deviceName') || 'My Device';
@@ -117,11 +142,11 @@ function setupEventListeners() {
     });
   }
   
-  // Add click handler for "Not logged in" text
+  // Add click handler for user status div
   if (userStatusDiv) {
     userStatusDiv.addEventListener('click', () => {
-      const userEmail = document.getElementById('userEmail').textContent;
-      if (userEmail === 'Not logged in') {
+      const authToken = localStorage.getItem('authToken');
+      if (!authToken) {
         showLoginModal();
       }
     });
@@ -185,8 +210,24 @@ async function handleLogin(e) {
       localStorage.setItem('userEmail', email);
       
       currentUser = { token: data.token, userId: data.userId };
-      document.getElementById('userEmail').textContent = email;
+      
+      // Update UI elements
+      const userEmailElement = document.getElementById('userEmail');
+      const logoutBtn = document.getElementById('logoutBtn');
+      const statusIndicator = document.querySelector('.user-status .status-indicator');
+      
+      if (userEmailElement) userEmailElement.textContent = email;
       document.getElementById('settingsEmail').value = email;
+      
+      if (statusIndicator) {
+        statusIndicator.classList.add('online');
+        statusIndicator.classList.remove('offline');
+      }
+      
+      if (logoutBtn) {
+        logoutBtn.textContent = 'Logout';
+        logoutBtn.style.display = 'block';
+      }
       
       hideModals();
       loadDevices();
@@ -218,6 +259,13 @@ async function handleRegister(e) {
       body: JSON.stringify({ email, password })
     });
     
+    // Check if response is JSON
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      console.error('Server response:', await response.text());
+      throw new Error('Server is not responding correctly. Please check if the server is running.');
+    }
+    
     const data = await response.json();
     
     if (data.success) {
@@ -233,13 +281,34 @@ async function handleRegister(e) {
 }
 
 function handleLogout() {
-  localStorage.clear();
+  // Clear auth-related items but keep settings
+  localStorage.removeItem('authToken');
+  localStorage.removeItem('userId');
+  localStorage.removeItem('userEmail');
+  localStorage.removeItem('deviceToken');
+  localStorage.removeItem('deviceId');
+  
   currentUser = null;
   if (ws) {
     ws.close();
     ws = null;
   }
-  location.reload();
+  
+  // Update UI without reloading
+  const userEmailElement = document.getElementById('userEmail');
+  const logoutBtn = document.getElementById('logoutBtn');
+  const statusIndicator = document.querySelector('.user-status .status-indicator');
+  const devicesList = document.getElementById('devicesList');
+  
+  if (userEmailElement) userEmailElement.textContent = 'Click to login';
+  if (logoutBtn) logoutBtn.style.display = 'none';
+  if (statusIndicator) {
+    statusIndicator.classList.remove('online');
+    statusIndicator.classList.add('offline');
+  }
+  if (devicesList) {
+    devicesList.innerHTML = '<div class="device-card empty"><p>Please login to see devices</p></div>';
+  }
 }
 
 async function registerDevice() {
