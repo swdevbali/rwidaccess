@@ -261,10 +261,23 @@ body {
   display: none;
 }
 
-#remoteVideo {
+#remoteVideo,
+#remoteCanvas {
   width: 100%;
   height: auto;
   display: block;
+}
+
+#remoteCanvas {
+  display: none;
+}
+
+.remote-screen.using-canvas #remoteCanvas {
+  display: block;
+}
+
+.remote-screen.using-canvas #remoteVideo {
+  display: none;
 }
 
 .controls {

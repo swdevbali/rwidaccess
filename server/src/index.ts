@@ -218,6 +218,21 @@ wss.on('connection', (ws) => {
               fromDeviceId: deviceInfo?.deviceId,
               fromName: data.fromName
             }));
+          } else {
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: 'Target device not found or offline'
+            }));
+          }
+          break;
+          
+        case 'connection-rejected':
+          const rejectTarget = connectedDevices.get(data.targetDeviceId);
+          if (rejectTarget) {
+            rejectTarget.ws.send(JSON.stringify({
+              type: 'connection-rejected',
+              fromDeviceId: deviceInfo?.deviceId
+            }));
           }
           break;
       }

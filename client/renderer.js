@@ -8,6 +8,7 @@ let currentDeviceId = null;
 let connectedDeviceId = null;
 let screenCaptureInterval = null;
 let dataChannel = null;
+let pendingIceCandidates = [];
 
 const SERVER_URL = localStorage.getItem('serverUrl') || 'https://rwidaccess.remoteworker.id';
 const WS_URL = localStorage.getItem('wsUrl') || 'wss://ws.rwidaccess.remoteworker.id';
@@ -307,9 +308,10 @@ async function loadDevices() {
           </div>
           <h3>${device.name}</h3>
           <p>Platform: ${device.platform}</p>
+          <p>Device ID: ${device.id}</p>
           <p>Last seen: ${new Date(device.lastSeen).toLocaleString()}</p>
           <div style="display: flex; gap: 10px; margin-top: 10px;">
-            ${device.isOnline ? `<button class="btn btn-sm" onclick="connectToDevice('${device.id}')">Connect</button>` : ''}
+            ${device.isOnline && device.id !== currentDeviceId ? `<button class="btn btn-sm" onclick="window.connectToDevice('${device.id}')">Connect</button>` : ''}
             <button class="btn btn-sm" style="background: #dc3545;" onclick="removeDevice('${device.id}')">Remove</button>
           </div>
         </div>
@@ -344,10 +346,17 @@ function connectWebSocket() {
     switch (data.type) {
       case 'authenticated':
         console.log('Authenticated with device ID:', data.deviceId);
+        currentDeviceId = data.deviceId;
+        loadDevices();
         break;
         
       case 'connection-request':
         handleIncomingConnection(data);
+        break;
+        
+      case 'connection-rejected':
+        alert('Connection request was rejected');
+        disconnectSession();
         break;
         
       case 'offer':
@@ -360,6 +369,14 @@ function connectWebSocket() {
         
       case 'ice-candidate':
         await handleIceCandidate(data);
+        break;
+        
+      case 'error':
+        console.error('WebSocket error:', data.message);
+        if (data.message === 'Invalid token') {
+          localStorage.removeItem('deviceToken');
+          alert('Session expired. Please register this device again.');
+        }
         break;
     }
   };
@@ -378,7 +395,16 @@ async function handleIncomingConnection(data) {
   const accept = confirm(`${data.fromName} wants to connect to your screen. Allow?`);
   
   if (accept) {
+    // Start screen share as the host
     await startScreenShare(data.fromDeviceId);
+  } else {
+    // Send rejection message
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'connection-rejected',
+        targetDeviceId: data.fromDeviceId
+      }));
+    }
   }
 }
 
@@ -662,10 +688,22 @@ function stopScreenCapture() {
 }
 
 function updateConnectionStatus(status) {
-  const statusElement = document.getElementById('connectionStatus');
+  let statusElement = document.getElementById('connectionStatus');
+  if (!statusElement) {
+    statusElement = document.createElement('div');
+    statusElement.id = 'connectionStatus';
+    statusElement.style.padding = '10px';
+    statusElement.style.textAlign = 'center';
+    statusElement.style.fontSize = '14px';
+    statusElement.style.color = '#666';
+    const remoteScreen = document.getElementById('remoteScreen');
+    if (remoteScreen && !remoteScreen.querySelector('#connectionStatus')) {
+      remoteScreen.insertBefore(statusElement, remoteScreen.firstChild);
+    }
+  }
   if (statusElement) {
     statusElement.textContent = status;
-    statusElement.className = `status-${status}`;
+    statusElement.className = `status-${status.toLowerCase().replace(/[^a-z]/g, '')}`;
   }
 }
 
@@ -685,8 +723,19 @@ function updateScreenshot(data) {
 
 async function handleOffer(data) {
   try {
-    createPeerConnection(data.fromDeviceId, false);
+    // Create peer connection if not exists
+    if (!peerConnection) {
+      createPeerConnection(data.fromDeviceId, false);
+    }
+    
     await peerConnection.setRemoteDescription(data.data);
+    
+    // Process any pending ICE candidates
+    for (const candidate of pendingIceCandidates) {
+      await peerConnection.addIceCandidate(candidate);
+    }
+    pendingIceCandidates = [];
+    
     const answer = await peerConnection.createAnswer();
     await peerConnection.setLocalDescription(answer);
     
@@ -695,6 +744,8 @@ async function handleOffer(data) {
       targetDeviceId: data.fromDeviceId,
       data: answer
     }));
+    
+    updateConnectionStatus('Connecting...');
   } catch (error) {
     console.error('Error handling offer:', error);
   }
@@ -710,9 +761,18 @@ async function handleAnswer(data) {
 
 async function handleIceCandidate(data) {
   try {
-    await peerConnection.addIceCandidate(data.data);
+    if (data.data) {
+      const candidate = new RTCIceCandidate(data.data);
+      
+      if (peerConnection && peerConnection.remoteDescription) {
+        await peerConnection.addIceCandidate(candidate);
+      } else {
+        // Store candidate for later if remote description not set yet
+        pendingIceCandidates.push(candidate);
+      }
+    }
   } catch (error) {
-    console.error('Error handling ICE candidate:', error);
+    console.error('Error adding ICE candidate:', error);
   }
 }
 
@@ -755,62 +815,58 @@ async function initiateConnection() {
     return;
   }
   
-  createPeerConnection(deviceId, false);
-  
-  ws.send(JSON.stringify({
-    type: 'request-connection',
-    targetDeviceId: deviceId,
-    fromName: document.getElementById('deviceName').value || 'Unknown Device'
-  }));
+  connectToDevice(deviceId);
 }
 
-async function handleOffer(data) {
-  if (!peerConnection) {
-    createPeerConnection(data.fromDeviceId, false);
+// Function to connect to a device (called from device cards or connect button)
+async function connectToDevice(deviceId) {
+  try {
+    // Check if it's the same device
+    if (deviceId === currentDeviceId) {
+      alert('Cannot connect to the same device');
+      return;
+    }
+    
+    // Switch to connect view
+    document.querySelectorAll('.menu-item').forEach(item => item.classList.remove('active'));
+    document.querySelector('[data-view="connect"]').classList.add('active');
+    document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
+    document.getElementById('connectView').classList.add('active');
+    
+    // Set the device ID in the input field
+    document.getElementById('deviceIdInput').value = deviceId;
+    
+    const deviceName = localStorage.getItem('deviceName') || 'Remote User';
+    
+    // Request connection through WebSocket
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      // Create peer connection as client
+      createPeerConnection(deviceId, false);
+      
+      ws.send(JSON.stringify({
+        type: 'request-connection',
+        targetDeviceId: deviceId,
+        fromName: deviceName
+      }));
+      
+      // Show remote screen area
+      document.getElementById('remoteScreen').classList.remove('hidden');
+      
+      // Update status
+      updateConnectionStatus('Requesting connection...');
+    } else {
+      alert('WebSocket not connected. Please wait and try again.');
+    }
+  } catch (error) {
+    console.error('Connection error:', error);
+    alert('Failed to connect: ' + error.message);
   }
-  
-  await peerConnection.setRemoteDescription(new RTCSessionDescription(data.data));
-  const answer = await peerConnection.createAnswer();
-  await peerConnection.setLocalDescription(answer);
-  
-  ws.send(JSON.stringify({
-    type: 'answer',
-    targetDeviceId: data.fromDeviceId,
-    data: answer
-  }));
 }
 
-async function handleAnswer(data) {
-  if (peerConnection) {
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.data));
-  }
-}
+// Make connectToDevice available globally
+window.connectToDevice = connectToDevice;
 
-async function handleIceCandidate(data) {
-  if (peerConnection) {
-    await peerConnection.addIceCandidate(new RTCIceCandidate(data.data));
-  }
-}
 
-function disconnectSession() {
-  if (peerConnection) {
-    peerConnection.close();
-    peerConnection = null;
-  }
-  
-  if (localStream) {
-    localStream.getTracks().forEach(track => track.stop());
-    localStream = null;
-  }
-  
-  if (remoteStream) {
-    remoteStream.getTracks().forEach(track => track.stop());
-    remoteStream = null;
-  }
-  
-  document.getElementById('remoteScreen').classList.add('hidden');
-  document.getElementById('remoteVideo').srcObject = null;
-}
 
 function toggleFullscreen() {
   const video = document.getElementById('remoteVideo');
