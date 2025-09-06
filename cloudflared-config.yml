@@ -1,0 +1,9 @@
+tunnel: a5a62e01-d933-4dd4-95fb-8230ccd26988
+credentials-file: /Users/ekowibowo/.cloudflared/a5a62e01-d933-4dd4-95fb-8230ccd26988.json
+
+ingress:
+  - hostname: rwidaccess.remoteworker.id
+    service: http://localhost:3003
+  - hostname: ws.rwidaccess.remoteworker.id
+    service: ws://localhost:3004
+  - service: http_status:404

@@ -9,8 +9,8 @@ let connectedDeviceId = null;
 let screenCaptureInterval = null;
 let dataChannel = null;
 
-const SERVER_URL = localStorage.getItem('serverUrl') || 'http://localhost:3003';
-const WS_URL = localStorage.getItem('wsUrl') || 'ws://localhost:3004';
+const SERVER_URL = localStorage.getItem('serverUrl') || 'https://rwidaccess.remoteworker.id';
+const WS_URL = localStorage.getItem('wsUrl') || 'wss://ws.rwidaccess.remoteworker.id';
 
 const configuration = {
   iceServers: [
@@ -37,6 +37,18 @@ function initializeApp() {
   const deviceNameElement = document.getElementById('deviceName');
   if (deviceNameElement) {
     deviceNameElement.value = savedDeviceName;
+  }
+  
+  // Load saved server URLs
+  const serverUrlElement = document.getElementById('serverUrl');
+  const wsUrlElement = document.getElementById('wsUrl');
+  
+  if (serverUrlElement) {
+    serverUrlElement.value = localStorage.getItem('serverUrl') || 'https://rwidaccess.remoteworker.id';
+  }
+  
+  if (wsUrlElement) {
+    wsUrlElement.value = localStorage.getItem('wsUrl') || 'wss://ws.rwidaccess.remoteworker.id';
   }
 }
 
@@ -69,6 +81,8 @@ function setupEventListeners() {
   
   const showRegisterBtn = document.getElementById('showRegisterBtn');
   const showLoginBtn = document.getElementById('showLoginBtn');
+  const cancelLoginBtn = document.getElementById('cancelLoginBtn');
+  const cancelRegisterBtn = document.getElementById('cancelRegisterBtn');
   const userStatusDiv = document.getElementById('userStatusDiv');
   
   if (showRegisterBtn) {
@@ -82,6 +96,23 @@ function setupEventListeners() {
     showLoginBtn.addEventListener('click', () => {
       document.getElementById('registerModal').classList.remove('active');
       document.getElementById('loginModal').classList.add('active');
+    });
+  }
+  
+  if (cancelLoginBtn) {
+    cancelLoginBtn.addEventListener('click', () => {
+      document.getElementById('loginModal').classList.remove('active');
+      document.getElementById('loginEmail').value = '';
+      document.getElementById('loginPassword').value = '';
+    });
+  }
+  
+  if (cancelRegisterBtn) {
+    cancelRegisterBtn.addEventListener('click', () => {
+      document.getElementById('registerModal').classList.remove('active');
+      document.getElementById('registerEmail').value = '';
+      document.getElementById('registerPassword').value = '';
+      document.getElementById('confirmPassword').value = '';
     });
   }
   
@@ -230,7 +261,17 @@ async function registerDevice() {
       })
     });
     
-    const data = await response.json();
+    const contentType = response.headers.get('content-type');
+    let data;
+    
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      console.error('Non-JSON response:', text);
+      alert('Server error: The server is not responding correctly. Make sure the API endpoint is accessible.');
+      return;
+    }
     
     if (data.success) {
       localStorage.setItem('deviceToken', data.token);
@@ -267,7 +308,10 @@ async function loadDevices() {
           <h3>${device.name}</h3>
           <p>Platform: ${device.platform}</p>
           <p>Last seen: ${new Date(device.lastSeen).toLocaleString()}</p>
-          ${device.isOnline ? `<button class="btn btn-sm" onclick="connectToDevice('${device.id}')">Connect</button>` : ''}
+          <div style="display: flex; gap: 10px; margin-top: 10px;">
+            ${device.isOnline ? `<button class="btn btn-sm" onclick="connectToDevice('${device.id}')">Connect</button>` : ''}
+            <button class="btn btn-sm" style="background: #dc3545;" onclick="removeDevice('${device.id}')">Remove</button>
+          </div>
         </div>
       `).join('');
     }
@@ -781,16 +825,59 @@ function saveSettings() {
   const deviceName = document.getElementById('deviceName').value;
   const quality = document.getElementById('quality').value;
   const serverUrl = document.getElementById('serverUrl').value;
+  const wsUrl = document.getElementById('wsUrl').value;
   
   localStorage.setItem('deviceName', deviceName);
   localStorage.setItem('quality', quality);
   localStorage.setItem('serverUrl', serverUrl);
+  localStorage.setItem('wsUrl', wsUrl);
   
-  alert('Settings saved successfully!');
+  alert('Settings saved successfully! Please reload the app for changes to take effect.');
+  
+  // Reload after a short delay to apply new settings
+  setTimeout(() => {
+    window.location.reload();
+  }, 1000);
 }
 
 window.connectToDevice = function(deviceId) {
   document.getElementById('deviceIdInput').value = deviceId;
   switchView('connect');
   initiateConnection();
+};
+
+window.removeDevice = async function(deviceId) {
+  if (!confirm('Are you sure you want to remove this device?')) {
+    return;
+  }
+  
+  if (!currentUser || !currentUser.token) {
+    alert('Please login first');
+    return;
+  }
+  
+  try {
+    const response = await fetch(`${SERVER_URL}/api/device/${deviceId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${currentUser.token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (response.ok) {
+      alert('Device removed successfully');
+      loadDevices();
+    } else if (response.status === 401) {
+      alert('Session expired. Please login again.');
+      handleLogout();
+    } else {
+      const error = await response.text();
+      console.error('Delete failed:', error);
+      alert('Failed to remove device');
+    }
+  } catch (error) {
+    console.error('Error removing device:', error);
+    alert('Error removing device: ' + error.message);
+  }
 };

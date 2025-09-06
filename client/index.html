@@ -112,7 +112,11 @@
             </div>
             <div class="setting-item">
               <label>Server URL</label>
-              <input type="text" id="serverUrl" class="input" value="http://localhost:3001">
+              <input type="text" id="serverUrl" class="input" placeholder="https://rwidaccess.remoteworker.id">
+            </div>
+            <div class="setting-item">
+              <label>WebSocket URL</label>
+              <input type="text" id="wsUrl" class="input" placeholder="wss://ws.rwidaccess.remoteworker.id">
             </div>
           </div>
           
@@ -135,6 +139,9 @@
           </div>
           <div class="form-actions">
             <button type="submit" class="btn btn-primary">Login</button>
+            <button type="button" id="cancelLoginBtn" class="btn btn-secondary">Cancel</button>
+          </div>
+          <div style="text-align: center; margin-top: 15px;">
             <button type="button" id="showRegisterBtn" class="btn btn-link">Create Account</button>
           </div>
         </form>
@@ -159,6 +166,9 @@
           </div>
           <div class="form-actions">
             <button type="submit" class="btn btn-primary">Register</button>
+            <button type="button" id="cancelRegisterBtn" class="btn btn-secondary">Cancel</button>
+          </div>
+          <div style="text-align: center; margin-top: 15px;">
             <button type="button" id="showLoginBtn" class="btn btn-link">Back to Login</button>
           </div>
         </form>

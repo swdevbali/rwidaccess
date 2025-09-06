@@ -118,6 +118,48 @@ app.get('/api/devices/:userId', async (req, res) => {
   }
 });
 
+app.delete('/api/device/:deviceId', async (req, res) => {
+  try {
+    // Check authorization header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const token = authHeader.split(' ')[1];
+    
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+      
+      // Verify the device belongs to the user
+      const device = await prisma.device.findUnique({
+        where: { id: req.params.deviceId }
+      });
+      
+      if (!device || device.userId !== decoded.userId) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+      
+      // Delete sessions first
+      await prisma.session.deleteMany({
+        where: { deviceId: req.params.deviceId }
+      });
+      
+      // Then delete the device
+      await prisma.device.delete({
+        where: { id: req.params.deviceId }
+      });
+      
+      res.json({ success: true });
+    } catch (jwtError) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+  } catch (error) {
+    console.error('Delete device error:', error);
+    res.status(400).json({ error: 'Failed to delete device' });
+  }
+});
+
 const wss = new WebSocketServer({ port: Number(WS_PORT) });
 
 wss.on('connection', (ws) => {
