@@ -402,8 +402,17 @@ function connectWebSocket() {
     ws.close();
   }
   
-  console.log('Connecting to WebSocket:', WS_URL);
-  ws = new WebSocket(WS_URL);
+  // Get the actual WebSocket URL from localStorage or use default
+  const wsUrl = localStorage.getItem('wsUrl') || WS_URL;
+  console.log('Connecting to WebSocket:', wsUrl);
+  console.log('Device Token:', deviceToken ? 'Present' : 'Missing');
+  
+  try {
+    ws = new WebSocket(wsUrl);
+  } catch (error) {
+    console.error('Failed to create WebSocket:', error);
+    return;
+  }
   
   ws.onopen = () => {
     console.log('WebSocket connected successfully');
