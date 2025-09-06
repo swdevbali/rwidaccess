@@ -393,16 +393,20 @@ async function loadDevices() {
 
 function connectWebSocket() {
   const deviceToken = localStorage.getItem('deviceToken');
-  if (!deviceToken) return;
+  if (!deviceToken) {
+    console.log('No device token, skipping WebSocket connection');
+    return;
+  }
   
   if (ws) {
     ws.close();
   }
   
+  console.log('Connecting to WebSocket:', WS_URL);
   ws = new WebSocket(WS_URL);
   
   ws.onopen = () => {
-    console.log('WebSocket connected');
+    console.log('WebSocket connected successfully');
     ws.send(JSON.stringify({
       type: 'authenticate',
       token: deviceToken
@@ -411,6 +415,7 @@ function connectWebSocket() {
   
   ws.onmessage = async (event) => {
     const data = JSON.parse(event.data);
+    console.log('WebSocket message:', data.type);
     
     switch (data.type) {
       case 'authenticated':
@@ -452,11 +457,17 @@ function connectWebSocket() {
   
   ws.onerror = (error) => {
     console.error('WebSocket error:', error);
+    console.error('Failed to connect to:', WS_URL);
+    console.log('Make sure the server is running and accessible');
   };
   
-  ws.onclose = () => {
-    console.log('WebSocket disconnected');
-    setTimeout(connectWebSocket, 5000);
+  ws.onclose = (event) => {
+    console.log('WebSocket disconnected:', event.code, event.reason);
+    // Only reconnect if we had a device token (meaning we should be connected)
+    if (localStorage.getItem('deviceToken')) {
+      console.log('Attempting to reconnect in 5 seconds...');
+      setTimeout(connectWebSocket, 5000);
+    }
   };
 }
 
@@ -965,11 +976,6 @@ function saveSettings() {
   }, 1000);
 }
 
-window.connectToDevice = function(deviceId) {
-  document.getElementById('deviceIdInput').value = deviceId;
-  switchView('connect');
-  initiateConnection();
-};
 
 window.removeDevice = async function(deviceId) {
   if (!confirm('Are you sure you want to remove this device?')) {
