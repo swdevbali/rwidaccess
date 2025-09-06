@@ -1,0 +1,38 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  devices   Device[]
+}
+
+model Device {
+  id          String   @id @default(uuid())
+  name        String
+  deviceId    String   @unique
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  platform    String
+  lastSeen    DateTime @default(now())
+  isOnline    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  sessions    Session[]
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  deviceId  String
+  device    Device   @relation(fields: [deviceId], references: [id])
+  token     String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+}
